@@ -2,4 +2,5 @@
 /// [Fluid](https://git.samerion.com/Samerion/Fluid). Written for `@safe` code.
 module diode;
 
+public import diode.set;
 public import diode.object;

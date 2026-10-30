@@ -69,6 +69,20 @@ bool equals(const Safe left, const Object right) {
     return left.opEquals(right);
 }
 
+/// Implementation for `equals` for non-object types. Performs comparison using the `==` operator.
+///
+/// This overload allows safe struct and object comparison in a generic (templated) context.
+///
+/// Params:
+///     left  = Left side of the comparison.
+///     right = Right side of the comparison.
+/// Returns:
+///     True if the two objects are equal.
+bool equals(A, B)(A left, B right)
+if (!is(A : const Safe) || !is(B : const Object)){
+    return left == right;
+}
+
 @("equals can compare interfaces in @safe code")
 unittest {
     class A : Safe {
