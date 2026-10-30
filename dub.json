@@ -2,10 +2,10 @@
 	"authors": [
 		"Artha"
 	],
-	"copyright": "Copyright © 2021, Artha",
-	"description": "My template for D applications",
+	"copyright": "Copyright © 2026, Artha",
+	"description": "Dependency injection framework for D",
 	"license": "BSL",
-	"name": "dtemplate",
-	"targetType": "executable",
+	"name": "diode",
+	"targetType": "library",
 	"targetPath": "build"
 }
