@@ -456,7 +456,7 @@ final class JoinPublisher : Publisher!() {
 Publisher!() thenAssertEquals(T, Inputs...)(T publisher, Inputs expected,
     string file = __FILE__, size_t line = __LINE__) {
 
-    return publisher.then!((Inputs received) {
+    void test(Ts...)(Ts received) {
         import std.conv : text;
         import std.typecons : tuple;
         import core.exception : AssertError;
@@ -466,7 +466,20 @@ Publisher!() thenAssertEquals(T, Inputs...)(T publisher, Inputs expected,
                 ", expected ", tuple(expected));
             throw new AssertError(msg, file, line);
         }
-    });
+    }
+
+    alias MatchingPublishers = MatchPublisher!(test, T);
+
+    static assert(MatchingPublishers.length != 0,
+        "Argument list " ~ Inputs.stringof
+            ~ " doesn't match any publisher " ~ PublisherTypes!T.stringof);
+    static assert(MatchingPublishers.length == 1,
+        "Argument list " ~ Inputs.stringof
+            ~ " matches multiple publishers " ~ MatchingPublishers.stringof);
+
+    alias Args = PublisherParams!(MatchingPublishers[0]);
+
+    return publisher.then!((Args args) => test(args));
 }
 
 @("thenAssertEquals throws AssertError when there's no match")
@@ -505,4 +518,42 @@ unittest {
     assertNotThrown!AssertError(new TuplePublisher().thenAssertEquals(1, 1));
     assertThrown!AssertError(new TuplePublisher().thenAssertEquals(1, 2));
     assertThrown!AssertError(new TuplePublisher().thenAssertEquals(2, 1));
+}
+
+@("thenAssertEquals supports subtypes")
+@system
+unittest {
+    import std.exception;
+    import core.exception;
+
+    abstract class Base : Safe {
+        mixin implementSafe;
+    }
+
+    class A : Base {
+
+    }
+
+    class BasePublisher : Publisher!Base {
+        mixin implementSafe;
+
+        Base base;
+
+        this(Base base) {
+            this.base = base;
+        }
+
+        void subscribe(Subscriber!Base subscriber) {
+            subscriber(base);
+        }
+    }
+
+    auto good = new A;
+    auto bad = new A;
+    Base base = good;
+
+    pipe(() => base).thenAssertEquals(good);
+    assertNotThrown!AssertError(new BasePublisher(base).thenAssertEquals(base));
+    assertNotThrown!AssertError(new BasePublisher(base).thenAssertEquals(good));
+    assertThrown!AssertError(new BasePublisher(base).thenAssertEquals(bad));
 }
