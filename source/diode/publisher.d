@@ -79,6 +79,8 @@ if (PublisherTypes!T.length > 0) {
 
     // Match against one of the publishers
     alias MatchingPublishers = MatchPublisher!(callback, T);
+    static assert(MatchingPublishers.length != 0,
+        "delegate passed to `then` doesn't match any publishers: " ~ PublisherTypes!T.stringof);
     static assert(MatchingPublishers.length == 1,
         "delegate passed to `then` matches multiple publishers: " ~ MatchingPublishers.stringof);
 
