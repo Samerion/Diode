@@ -451,3 +451,58 @@ final class JoinPublisher : Publisher!() {
     }
 
 }
+
+/// Connect to a publisher and assert the values it sends equal the one attached.
+Publisher!() thenAssertEquals(T, Inputs...)(T publisher, Inputs expected,
+    string file = __FILE__, size_t line = __LINE__) {
+
+    return publisher.then!((Inputs received) {
+        import std.conv : text;
+        import std.typecons : tuple;
+        import core.exception : AssertError;
+        if (expected != received) {
+            const msg = text(
+                "Assert failed: received ", tuple(received),
+                ", expected ", tuple(expected));
+            throw new AssertError(msg, file, line);
+        }
+    });
+}
+
+@("thenAssertEquals throws AssertError when there's no match")
+@system
+unittest {
+    import std.exception;
+    import core.exception;
+
+    assertNotThrown!AssertError({
+        auto p = pipe(() => 1);
+        p.thenAssertEquals(1);
+        p.put();
+    }());
+    assertThrown!AssertError({
+        auto p = pipe(() => 1);
+        p.thenAssertEquals(2);
+        p.put();
+    }());
+
+}
+
+@("thenAssertEquals supports tuples")
+@system
+unittest {
+    import std.exception;
+    import core.exception;
+
+    class TuplePublisher : Publisher!(int, int) {
+        mixin implementSafe;
+
+        void subscribe(Subscriber!(int, int) subscriber) {
+            subscriber(1, 1);
+        }
+    }
+
+    assertNotThrown!AssertError(new TuplePublisher().thenAssertEquals(1, 1));
+    assertThrown!AssertError(new TuplePublisher().thenAssertEquals(1, 2));
+    assertThrown!AssertError(new TuplePublisher().thenAssertEquals(2, 1));
+}
