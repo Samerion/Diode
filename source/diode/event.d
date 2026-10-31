@@ -33,6 +33,11 @@ struct Event(Ts...) {
         return _subscribers.length;
     }
 
+    /// Remove all susbcribers from the event.
+    void clear() {
+        subscribers.clear();
+    }
+
     /// Bind a handler callback to the event. The given function will be called whenever the event
     /// fires.
     ///
