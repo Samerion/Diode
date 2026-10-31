@@ -5,3 +5,4 @@ module diode;
 public import diode.set;
 public import diode.event;
 public import diode.object;
+public import diode.publisher;
