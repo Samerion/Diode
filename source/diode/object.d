@@ -64,6 +64,21 @@ bool equals(const Safe left, const Object right) {
     return left.opEquals(right);
 }
 
+/// ditto
+bool equals(T)(const Safe left, const T right)  // gets lower precedence over equals(Safe, Object)
+if (is(T : const Safe) && is(T == interface)) {
+    if (left is null || right is null) {
+        return left is null
+            && right is null;
+    }
+    if (auto safeRight = cast(const Object) right) {
+        return left.opEquals(safeRight);
+    }
+    else {
+        return false;
+    }
+}
+
 /// Implementation for `equals` for non-object types. Performs comparison using the `==` operator.
 ///
 /// This overload allows safe struct and object comparison in a generic (templated) context.
@@ -74,9 +89,12 @@ bool equals(const Safe left, const Object right) {
 /// Returns:
 ///     True if the two objects are equal.
 bool equals(A, B)(A left, B right)
-if (!is(A : const Safe) || !is(B : const Object)){
+if (!isObjectComparison!(A, B)) {
     return left == right;
 }
+
+private enum isObjectComparison(A, B) = is(A : const Safe) && is(B : const Object)
+    || is(A : const Safe) && is(B : const Safe);
 
 @("equals can compare interfaces in @safe code")
 unittest {
