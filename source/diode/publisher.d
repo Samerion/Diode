@@ -27,7 +27,16 @@ interface Publisher(Ts...) : Safe {
 enum isPublisherInterface(T) = is(T == Publisher!Args, Args...);
 
 /// Provides a tuple of all `Publisher` types implemented by given `T`.
-alias PublisherTypes(T) = Filter!(isPublisherInterface, NoDuplicates!(InterfacesTuple!T));
+template PublisherTypes(T) {
+    static if (isPublisherInterface!T) {
+        alias PublisherTypes = T;
+    }
+    else {
+        alias PublisherTypes = Filter!(isPublisherInterface, NoDuplicates!(InterfacesTuple!T));
+    }
+}
+
+static assert(is(PublisherTypes!(Publisher!()) == Publisher!()));
 
 /// Provides a tuple of parameters provided by given publisher interface.
 template PublisherParams(T)
