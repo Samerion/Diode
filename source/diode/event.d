@@ -174,9 +174,15 @@ if (isPublisherInterface!T) {
 ///     publisher = Publisher to subscriber to.
 ///     callback  = Delegate to call when the publisher provides data.
 /// Returns:
-///     Returns a [Pipe] object that wraps the return value of the publisher provided.
+///     Returns a [Pipe] object that wraps the return value of the callback provided.
 ///     This pipe can be subscribed to, so that once `then` receives data, any data provided by
 ///     the callback's return value can be received through the pipe.
+///
+///     ---
+///     then!(() => /* returns Publisher!T */)  // -> return value is Publisher!T
+///     then!(() => /* returns T */)            // -> return value is Publisher!T
+///     then!(() => /* returns void */)         // -> return value is Publisher!()
+///     ---
 auto then(alias callback, T)(T publisher)
 if (PublisherTypes!T.length > 0) {
 
@@ -196,14 +202,9 @@ if (PublisherTypes!T.length > 0) {
 
         // Instantiate and perform the call
         auto dg = delegate (Args args) @safe => callback(args);
-        static if (is(Return == void)) {
-            matchingPublisher.subscribe(dg);
-        }
-        else {
-            auto pipe = new Pipe!(Return, Args)(dg);
-            matchingPublisher.subscribe(&pipe.put);
-            return pipe;
-        }
+        auto pipe = new Pipe!(Return, Args)(dg);
+        matchingPublisher.subscribe(&pipe.put);
+        return pipe;
 
     }
     else static assert(false);
@@ -294,6 +295,24 @@ unittest {
     assert(result == 35);
 }
 
+@("`then` supports chaining void")
+unittest {
+    class Pusher : Publisher!() {
+        mixin implementSafe;
+        mixin implementPublisher!();
+    }
+
+    auto pusher = new Pusher;
+    int counter = 1;
+
+    pusher
+        .then!({ counter *= 3; })
+        .then!({ counter *= 5; })
+        .then!({ counter *= 7; });
+    pusher.subscriber();
+    assert(counter == 105);
+}
+
 /// Construct a [Pipe] object.
 /// Params:
 ///     dg = Delegate to pass to the pipe.
@@ -309,22 +328,25 @@ Pipe!(Return, Args) pipe(Return, Args...)(Return function(Args) @safe dg) {
 }
 
 /// A pipe is a publisher type that calls a delegate and expects a publisher. It will emit
-/// data when that publisher provides it with its own.
-final class Pipe(Return, Args...) : Safe, PublisherTypes!Return, Publisher!Return {
+/// data when that publisher provides it with its own. It can also emit the publisher itself.
+///
+/// Pipe also supports a special case: `Return == void` in which case it will implement
+/// `Publisher!()`, which will fire after the pipe runs the callback.
+final class Pipe(Return, Args...) : Safe, PublisherTypes!Return, Publisher!(EraseVoid!Return) {
     mixin implementSafe;
 
     alias Publishers = PublisherTypes!Return;
 
     Return delegate(Args) @safe callback;
     staticMap!(SubscriberOf, Publishers) subscribers;
-    Subscriber!Return mainSubscriber;
+    Subscriber!(EraseVoid!Return) mainSubscriber;
 
     static foreach (i, T; Publishers) {
         static if (is(T == Publisher!Args2, Args2...)) {
             override mixin implementPipePublisher!(subscribers[i], Args2);
         }
     }
-    override mixin implementPipePublisher!(mainSubscriber, Return);
+    override mixin implementPipePublisher!(mainSubscriber, EraseVoid!Return);
 
     this(Return delegate(Args) @safe callback) {
         this.callback = callback;
@@ -332,21 +354,29 @@ final class Pipe(Return, Args...) : Safe, PublisherTypes!Return, Publisher!Retur
 
     /// Run the [callback].
     void put(Args args) {
-        auto result = callback(args);
-        if (mainSubscriber) {
-            mainSubscriber(result);
-        }
-        foreach (i, T; Publishers) {
-            auto resultT = cast(T) result;
-            assert(resultT !is null);
-
-            auto thisT = cast(T) this;
-            assert(thisT !is null);
-
-            static if (is(T == Publisher!Args2, Args2...)) {
-                resultT.subscribe(&call!(i, Args2));
+        static if (is(Return == void)) {
+            callback(args);
+            if (mainSubscriber) {
+                mainSubscriber();
             }
-            else static assert(false);
+        }
+        else {
+            auto result = callback(args);
+            if (mainSubscriber) {
+                mainSubscriber(result);
+            }
+            foreach (i, T; Publishers) {
+                auto resultT = cast(T) result;
+                assert(resultT !is null);
+
+                auto thisT = cast(T) this;
+                assert(thisT !is null);
+
+                static if (is(T == Publisher!Args2, Args2...)) {
+                    resultT.subscribe(&call!(i, Args2));
+                }
+                else static assert(false);
+            }
         }
     }
 
@@ -356,6 +386,8 @@ final class Pipe(Return, Args...) : Safe, PublisherTypes!Return, Publisher!Retur
         }
     }
 }
+
+private alias EraseVoid(Args...) = EraseAll!(void, Args);
 
 /// Implement `Publisher`. Accepts only one delegate at a time.
 private mixin template implementPipePublisher(alias target, Args...) {
