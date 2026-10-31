@@ -79,6 +79,8 @@ if (PublisherTypes!T.length > 0) {
 
     // Match against one of the publishers
     alias MatchingPublishers = MatchPublisher!(callback, T);
+    static assert(MatchingPublishers.length != 0,
+        "delegate passed to `then` doesn't match any publishers: " ~ PublisherTypes!T.stringof);
     static assert(MatchingPublishers.length == 1,
         "delegate passed to `then` matches multiple publishers: " ~ MatchingPublishers.stringof);
 
@@ -204,6 +206,24 @@ unittest {
     assert(counter == 105);
 }
 
+@("`then` supports self-publishing types")
+unittest {
+    class SelfPublisher : Publisher!SelfPublisher {
+        mixin implementSafe;
+
+        void subscribe(Subscriber!SelfPublisher subscriber) { }
+    }
+
+    SelfPublisher publisher;
+
+    auto pipe = pipe(() => new SelfPublisher);
+    pipe
+        .then!(a => a)
+        .then!(a => publisher = a);
+    pipe.put();
+    assert(publisher !is null);
+}
+
 /// Construct a [Pipe] object.
 /// Params:
 ///     dg = Delegate to pass to the pipe.
@@ -218,15 +238,23 @@ Pipe!(Return, Args) pipe(Return, Args...)(Return function(Args) @safe dg) {
     return new Pipe!(Return, Args)(delegate(Args args) => dg(args));
 }
 
+/// Get a tuple of publisher interfaces that Pipe given T as the first parameter.
+alias PipePublishers(T) = NoDuplicates!(
+    PublisherTypes!T,
+    Publisher!(EraseVoid!T));
+
 /// A pipe is a publisher type that calls a delegate and expects a publisher. It will emit
 /// data when that publisher provides it with its own. It can also emit the publisher itself.
 ///
 /// Pipe also supports a special case: `Return == void` in which case it will implement
 /// `Publisher!()`, which will fire after the pipe runs the callback.
-final class Pipe(Return, Args...) : Safe, PublisherTypes!Return, Publisher!(EraseVoid!Return) {
+final class Pipe(Return, Args...) : Safe, PipePublishers!Return {
     mixin implementSafe;
 
     alias Publishers = PublisherTypes!Return;
+
+    /// True if the given type publishes self.
+    enum isSelfPublishing = !is(Return == void) && is(Return : Publisher!Return);
 
     Return delegate(Args) @safe callback;
     staticMap!(SubscriberOf, Publishers) subscribers;
@@ -237,10 +265,14 @@ final class Pipe(Return, Args...) : Safe, PublisherTypes!Return, Publisher!(Eras
             override mixin implementPipePublisher!(subscribers[i], Args2);
         }
     }
-    override mixin implementPipePublisher!(mainSubscriber, EraseVoid!Return);
 
     this(Return delegate(Args) @safe callback) {
         this.callback = callback;
+    }
+
+    // Higher priority over mixin
+    override void subscribe(Subscriber!(EraseVoid!Return) subscriber) {
+        this.mainSubscriber = subscriber;
     }
 
     /// Run the [callback].
