@@ -4,6 +4,8 @@ module diode.object;
 @safe:
 
 /// Base interface for safe objects.
+///
+/// See [implementSafe] for a mixin that implements the `Safe` methods.
 interface Safe {
 
     /// Compare two objects for equality.
@@ -16,16 +18,21 @@ interface Safe {
 
 }
 
+/// This mixin provides default implementations for methods required by [Safe].
+mixin template implementSafe() {
+    override bool opEquals(const Object other) const @safe {
+        return this is other;
+    }
+
+    override string toString() const @safe {
+        return typeid(this).toString();
+    }
+}
+
 @("Safe objects can be compared in safe code")
 unittest {
     class A : Safe {
-        override bool opEquals(const Object other) const {
-            return this is other;
-        }
-
-        override string toString() const {
-            return typeid(this).toString();
-        }
+        mixin implementSafe;
     }
 
     auto a = new A;
