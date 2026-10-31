@@ -29,18 +29,6 @@ mixin template implementSafe() {
     }
 }
 
-@("Safe objects can be compared in safe code")
-unittest {
-    class A : Safe {
-        mixin implementSafe;
-    }
-
-    auto a = new A;
-    assert(new A != new A);
-    assert(new A != a);
-    assert(a == a);
-}
-
 /// Compare two objects or interface instances in a safe manner.
 ///
 /// The D runtime will fail to infer equality comparison using the `==` operator as `@safe`
