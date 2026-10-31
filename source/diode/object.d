@@ -3,6 +3,8 @@ module diode.object;
 
 @safe:
 
+import std.typecons;
+
 /// Base interface for safe objects.
 ///
 /// See [implementSafe] for a mixin that implements the `Safe` methods.
@@ -79,6 +81,25 @@ if (is(T : const Safe) && is(T == interface)) {
     }
 }
 
+/// Implementation of `equals` for tuples. Performs comparison recursively.
+///
+/// This overload allows safe struct and object comparison in a generic (templated) context.
+///
+/// Params:
+///     left  = Left side of the comparison.
+///     right = Right side of the comparison.
+/// Returns:
+///     True if the two objects are equal.
+bool equals(A, B)(A left, B right)
+if (isTupleComparison!(A, B) && A.length == B.length) {
+    static foreach (i; 0 .. left.length) {
+        if (!equals(left[i], right[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Implementation for `equals` for non-object types. Performs comparison using the `==` operator.
 ///
 /// This overload allows safe struct and object comparison in a generic (templated) context.
@@ -89,12 +110,13 @@ if (is(T : const Safe) && is(T == interface)) {
 /// Returns:
 ///     True if the two objects are equal.
 bool equals(A, B)(A left, B right)
-if (!isObjectComparison!(A, B)) {
+if (!isObjectComparison!(A, B) && !isTupleComparison!(A, B)) {
     return left == right;
 }
 
 private enum isObjectComparison(A, B) = is(A : const Safe) && is(B : const Object)
     || is(A : const Safe) && is(B : const Safe);
+private enum isTupleComparison(A, B) = isTuple!A && isTuple!B;
 
 @("equals can compare interfaces in @safe code")
 unittest {
@@ -143,4 +165,27 @@ unittest {
     assert( equals(safe2, safe2));
     assert(!equals(safe1, safe2));
     assert(!equals(safe2, safe1));
+}
+
+@("equals can compare tuples")
+unittest {
+    class A : Safe {
+        mixin implementSafe;
+    }
+
+    auto a = new A;
+    auto b = new A;
+    Safe safeA = a;
+    Safe safeB = b;
+
+    assert( equals(tuple(0, 0), tuple(0, 0)));
+    assert( equals(tuple(0, 1), tuple(0, 1)));
+    assert(!equals(tuple(0, 0), tuple(0, 1)));
+
+    assert( equals(tuple(0, a), tuple(0, a)));
+    assert( equals(tuple(a, a), tuple(a, a)));
+    assert( equals(tuple(a, safeA), tuple(a, safeA)));
+    assert(!equals(tuple(0, a), tuple(0, b)));
+    assert(!equals(tuple(a, a), tuple(a, b)));
+    assert(!equals(tuple(a, safeA), tuple(a, safeB)));
 }
