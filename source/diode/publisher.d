@@ -225,20 +225,34 @@ unittest {
 
 @("`then` supports self-publishing types")
 unittest {
+
     class SelfPublisher : Publisher!SelfPublisher {
         mixin implementSafe;
 
-        void subscribe(Subscriber!SelfPublisher subscriber) { }
+        Subscriber!SelfPublisher subscriber;
+
+        void subscribe(Subscriber!SelfPublisher subscriber) {
+            this.subscriber = subscriber;
+        }
+
+        void put() @safe {
+            subscriber(this);
+        }
     }
 
-    SelfPublisher publisher;
+    auto publisher = new SelfPublisher;
+    int result = 1;
 
-    auto pipe = pipe(() => new SelfPublisher);
+    auto pipe = pipe(() => publisher);  // pipe 1
     pipe
-        .then!(a => a)
-        .then!(a => publisher = a);
-    pipe.put();
-    assert(publisher !is null);
+        .then!((a) { result *= 3; return a; })  // pipe 2
+        .then!((a) { result *= 5; return a; });
+    pipe.put();       // start pipe
+    assert(result == 1);
+    publisher.put();  // await pipe 1
+    assert(result == 3);
+    publisher.put();  // await pipe 2
+    assert(result == 15);
 }
 
 /// Construct a [Pipe] object.
@@ -275,34 +289,38 @@ final class Pipe(Return, Args...) : Safe, PipePublishers!Return {
 
     Return delegate(Args) @safe callback;
     staticMap!(SubscriberOf, Publishers) subscribers;
-    Subscriber!(EraseVoid!Return) mainSubscriber;
 
     static foreach (i, T; Publishers) {
         override mixin implementPipePublisher!(subscribers[i], PublisherParams!T);
+    }
+
+    static if (!isSelfPublishing) {
+        Subscriber!(EraseVoid!Return) mainSubscriber;
+        override mixin implementPipePublisher!(mainSubscriber, EraseVoid!Return);
     }
 
     this(Return delegate(Args) @safe callback) {
         this.callback = callback;
     }
 
-    // Higher priority over mixin
-    override void subscribe(Subscriber!(EraseVoid!Return) subscriber) {
-        this.mainSubscriber = subscriber;
+    private void callMainSubscriber(EraseVoid!Return args) {
+        static if (!isSelfPublishing) {
+            if (mainSubscriber) {
+                mainSubscriber(args);
+            }
+        }
+
     }
 
     /// Run the [callback].
     void put(Args args) {
         static if (is(Return == void)) {
             callback(args);
-            if (mainSubscriber) {
-                mainSubscriber();
-            }
+            callMainSubscriber();
         }
         else {
             auto result = callback(args);
-            if (mainSubscriber) {
-                mainSubscriber(result);
-            }
+            callMainSubscriber(result);
             foreach (i, T; Publishers) {
                 auto resultT = cast(T) result;
                 assert(resultT !is null);
