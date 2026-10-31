@@ -172,14 +172,16 @@ if (isPublisherInterface!T) {
 ///
 /// Params:
 ///     publisher = Publisher to subscriber to.
-///     delegate  = Delegate to call when the publisher provides data.
+///     callback  = Delegate to call when the publisher provides data.
 /// Returns:
-///     TODO
-auto then(alias subscriber, T)(T publisher)
+///     Returns a [Pipe] object that wraps the return value of the publisher provided.
+///     This pipe can be subscribed to, so that once `then` receives data, any data provided by
+///     the callback's return value can be received through the pipe.
+auto then(alias callback, T)(T publisher)
 if (PublisherTypes!T.length > 0) {
 
     // Match against one of the publishers
-    alias MatchingPublishers = MatchPublisher!(subscriber, T);
+    alias MatchingPublishers = MatchPublisher!(callback, T);
     static assert(MatchingPublishers.length == 1,
         "delegate passed to `then` matches multiple publishers: " ~ MatchingPublishers.stringof);
 
@@ -190,10 +192,10 @@ if (PublisherTypes!T.length > 0) {
         auto matchingPublisher = cast(MatchingPublisher) publisher;
         assert(matchingPublisher !is null);
 
-        alias Return = typeof(subscriber(Args.init));
+        alias Return = typeof(callback(Args.init));
 
         // Instantiate and perform the call
-        auto dg = (Args args) => subscriber(args);
+        auto dg = (Args args) @safe => callback(args);
         static if (is(Return == void)) {
             matchingPublisher.subscribe(dg);
         }
@@ -234,6 +236,47 @@ unittest {
     assert(texts == ["A"]);
 }
 
+@("`then` is chainable")
+unittest {
+    class YieldThree : Publisher!int {
+        mixin implementSafe;
+        mixin implementPublisher!int;
+
+        void call() @safe {
+            subscriber(3);
+        }
+    }
+
+    class TimesFive : Publisher!int {
+        mixin implementSafe;
+        mixin implementPublisher!int;
+
+        int value;
+
+        TimesFive setup(int value) @safe {
+            this.value = value;
+            return this;
+        }
+
+        void call() @safe {
+            subscriber(value * 5);
+        }
+    }
+
+    int result;
+
+    auto yieldThree = new YieldThree;
+    auto timesFive = new TimesFive;
+
+    yieldThree
+        .then!(a => timesFive.setup(a))
+        .then!((a) { result = a; });
+
+    yieldThree.call();
+    timesFive.call();
+    assert(result == 15);
+}
+
 /// A pipe is a publisher type that calls a delegate and expects a publisher. It will emit
 /// data when that publisher provides it with its own.
 final class Pipe(Return, Args...) : Safe, PublisherTypes!Return {
@@ -243,6 +286,12 @@ final class Pipe(Return, Args...) : Safe, PublisherTypes!Return {
 
     Return delegate(Args) @safe callback;
     staticMap!(SubscriberOf, Publishers) subscribers;
+
+    static foreach (i, T; Publishers) {
+        static if (is(T == Publisher!Args2, Args2...)) {
+            override mixin implementPipePublisher!(subscribers[i], Args2);
+        }
+    }
 
     this(Return delegate(Args) @safe callback) {
         this.callback = callback;
@@ -273,12 +322,16 @@ final class Pipe(Return, Args...) : Safe, PublisherTypes!Return {
 }
 
 /// Implement `Publisher`. Accepts only one delegate at a time.
-mixin template implementPublisherSingle(Args...) {
+private mixin template implementPipePublisher(alias target, Args...) {
+    override void subscribe(Subscriber!Args subscriber) {
+        target = subscriber;
+    }
+}
 
+mixin template implementPublisher(Args...) {
     Subscriber!Args subscriber;
 
     override void subscribe(Subscriber!Args subscriber) {
         this.subscriber = subscriber;
     }
-
 }
