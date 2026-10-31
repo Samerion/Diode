@@ -17,20 +17,25 @@ alias Subscriber(Ts...) = void delegate(Ts) @safe;
 /// The event can provide arguments which are then made available to the delegates.
 struct Event(Ts...) {
 
-    private {
-        Set!(Subscriber!Ts) _subscribers;
+    public {
+        Set!(Subscriber!Ts) subscribers;
     }
 
     /// Returns:
     ///     True if the set is empty (has no elements in it).
     bool isEmpty() const {
-        return _subscribers.isEmpty();
+        return subscribers.isEmpty();
     }
 
     /// Returns:
     ///     Number of subscribers bound to the event.
     size_t length() const {
-        return _subscribers.length;
+        return subscribers.length;
+    }
+
+    /// Remove all susbcribers from the event.
+    void clear() {
+        subscribers.clear();
     }
 
     /// Bind a handler callback to the event. The given function will be called whenever the event
@@ -49,7 +54,7 @@ struct Event(Ts...) {
     /// See_Also:
     ///     [unsubscribe]
     bool subscribe(Subscriber!Ts subscriber) {
-        return _subscribers.add(subscriber);
+        return subscribers.add(subscriber);
     }
 
     /// ditto
@@ -65,7 +70,7 @@ struct Event(Ts...) {
     /// See_Also:
     ///     [subscribe]
     bool unsubscribe(Subscriber!Ts subscriber) {
-        return _subscribers.remove(subscriber);
+        return subscribers.remove(subscriber);
     }
 
     /// Activate the event.
@@ -76,7 +81,7 @@ struct Event(Ts...) {
     /// Params:
     ///     arguments = Arguments to pass to the functions.
     void opCall(Ts arguments) {
-        foreach (subscriber; _subscribers) {
+        foreach (subscriber; subscribers) {
             subscriber(arguments);
         }
     }
