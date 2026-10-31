@@ -195,7 +195,7 @@ if (PublisherTypes!T.length > 0) {
         alias Return = typeof(callback(Args.init));
 
         // Instantiate and perform the call
-        auto dg = (Args args) @safe => callback(args);
+        auto dg = delegate (Args args) @safe => callback(args);
         static if (is(Return == void)) {
             matchingPublisher.subscribe(dg);
         }
@@ -277,21 +277,54 @@ unittest {
     assert(result == 15);
 }
 
+@("`then` supports chaining non-Publisher types")
+unittest {
+    class A : Publisher!int {
+        mixin implementSafe;
+        mixin implementPublisher!int;
+    }
+
+    auto a = new A;
+    int result;
+
+    a
+        .then!((a) => a * 7)
+        .then!((a) => result = a);
+    a.subscriber(5);
+    assert(result == 35);
+}
+
+/// Construct a [Pipe] object.
+/// Params:
+///     dg = Delegate to pass to the pipe.
+/// Returns:
+///     Constructed pipe object.
+Pipe!(Return, Args) pipe(Return, Args...)(Return delegate(Args) @safe dg) {
+    return new Pipe!(Return, Args)(dg);
+}
+
+/// ditto
+Pipe!(Return, Args) pipe(Return, Args...)(Return function(Args) @safe dg) {
+    return new Pipe!(Return, Args)(delegate(Args args) => dg(args));
+}
+
 /// A pipe is a publisher type that calls a delegate and expects a publisher. It will emit
 /// data when that publisher provides it with its own.
-final class Pipe(Return, Args...) : Safe, PublisherTypes!Return {
+final class Pipe(Return, Args...) : Safe, PublisherTypes!Return, Publisher!Return {
     mixin implementSafe;
 
     alias Publishers = PublisherTypes!Return;
 
     Return delegate(Args) @safe callback;
     staticMap!(SubscriberOf, Publishers) subscribers;
+    Subscriber!Return mainSubscriber;
 
     static foreach (i, T; Publishers) {
         static if (is(T == Publisher!Args2, Args2...)) {
             override mixin implementPipePublisher!(subscribers[i], Args2);
         }
     }
+    override mixin implementPipePublisher!(mainSubscriber, Return);
 
     this(Return delegate(Args) @safe callback) {
         this.callback = callback;
@@ -300,6 +333,9 @@ final class Pipe(Return, Args...) : Safe, PublisherTypes!Return {
     /// Run the [callback].
     void put(Args args) {
         auto result = callback(args);
+        if (mainSubscriber) {
+            mainSubscriber(result);
+        }
         foreach (i, T; Publishers) {
             auto resultT = cast(T) result;
             assert(resultT !is null);
