@@ -29,6 +29,14 @@ enum isPublisherInterface(T) = is(T == Publisher!Args, Args...);
 /// Provides a tuple of all `Publisher` types implemented by given `T`.
 alias PublisherTypes(T) = Filter!(isPublisherInterface, NoDuplicates!(InterfacesTuple!T));
 
+/// Provides a tuple of parameters provided by given publisher interface.
+template PublisherParams(T)
+if (isPublisherInterface!T) {
+    static if(is(T == Publisher!Args, Args...)) {
+        alias PublisherParams = Args;
+    }
+}
+
 /// Returns a subscriber type equivalent of given publisher type
 template SubscriberOf(T)
 if (isPublisherInterface!T) {
@@ -261,9 +269,7 @@ final class Pipe(Return, Args...) : Safe, PipePublishers!Return {
     Subscriber!(EraseVoid!Return) mainSubscriber;
 
     static foreach (i, T; Publishers) {
-        static if (is(T == Publisher!Args2, Args2...)) {
-            override mixin implementPipePublisher!(subscribers[i], Args2);
-        }
+        override mixin implementPipePublisher!(subscribers[i], PublisherParams!T);
     }
 
     this(Return delegate(Args) @safe callback) {
@@ -310,6 +316,17 @@ final class Pipe(Return, Args...) : Safe, PipePublishers!Return {
     }
 }
 
+@("Pipe can work with multiple publishers")
+unittest {
+    class A : Publisher!int, Publisher!string {
+        mixin implementSafe;
+        mixin implementPublisher!int;
+        mixin implementPublisher!string;
+    }
+
+    auto p = pipe(() => new A);
+}
+
 private alias EraseVoid(Args...) = EraseAll!(void, Args);
 
 /// Implement `Publisher`. Accepts only one delegate at a time.
@@ -322,8 +339,8 @@ private mixin template implementPipePublisher(alias target, Args...) {
 mixin template implementPublisher(Args...) {
     Subscriber!Args subscriber;
 
-    override void subscribe(Subscriber!Args subscriber) {
-        this.subscriber = subscriber;
+    override void subscribe(Subscriber!Args newSubscriber) {
+        subscriber = newSubscriber;
     }
 }
 
