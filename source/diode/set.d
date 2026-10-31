@@ -136,7 +136,7 @@ struct Set(T) {
     /// Returns:
     ///     True if the item exists in the set.
     bool opBinaryRight(string op : "in")(const T key) const {
-        return _data[].canFind!((a, b) => equals(a, b))(key);
+        return _data[].canFind!((T a, T b) => equals(a, b))(key);
     }
 
     /// Insert an item into the set.

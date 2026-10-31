@@ -1,0 +1,32 @@
+name: Run all tests
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  test:
+    name: DUB tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest, macos-14]
+        dc: [dmd, ldc, ldc-1.28.1]
+        dub: [dub]
+        exclude:
+          - { os: macos-latest, dc: dmd }
+          - { os: macos-14, dc: dmd }
+
+    runs-on: ${{ matrix.os }}
+    env:
+      DUB: dub
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install D compiler
+        uses: dlang-community/setup-dlang@v2
+        with:
+          compiler: ${{ matrix.dc }}
+
+      - name: Run tests
+        shell: bash
+        run: $DUB test

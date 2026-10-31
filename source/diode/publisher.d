@@ -478,7 +478,7 @@ Publisher!() thenAssertEquals(T, Inputs...)(T publisher, Inputs expected,
         import std.conv : text;
         import std.typecons : tuple;
         import core.exception : AssertError;
-        if (expected != received) {
+        if (!equals(tuple(expected), tuple(received))) {
             const msg = text(
                 "Assert failed: received ", tuple(received),
                 ", expected ", tuple(expected));
