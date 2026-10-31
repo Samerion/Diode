@@ -52,6 +52,11 @@ struct Event(Ts...) {
         return _subscribers.add(subscriber);
     }
 
+    /// ditto
+    void opOpAssign(string op : "~")(Subscriber!Ts subscriber) {
+        subscribe(subscriber);
+    }
+
     /// Remove a handler callback from the event. Does nothing if the delegate is not in the set.
     /// Params:
     ///     subscriber = Function to remove from the event's subscriber list.

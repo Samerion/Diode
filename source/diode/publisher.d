@@ -294,3 +294,102 @@ mixin template implementPublisher(Args...) {
         this.subscriber = subscriber;
     }
 }
+
+/// Combine multiple publishers to create one that waits until all of them are completed.
+///
+/// ---
+/// auto one = pipe({
+///     writeln("One finished");
+/// });
+/// auto two = pipe({
+///     writeln("Two finished");
+/// });
+/// join(one, two).then({
+///     writeln("Both done");
+/// });
+/// one();  // One finished
+/// two();  // Two finished
+/// // Both done
+/// ---
+JoinPublisher join(Publisher!()[] publishers...) {
+
+    return new JoinPublisher(publishers);
+
+}
+
+@("JoinPublisher emits an event when all tasks finish")
+unittest {
+
+    int oneFinished;
+    int twoFinished;
+    int joinFinished;
+
+    auto one = pipe({ oneFinished++; });
+    auto two = pipe({ twoFinished++; });
+    join(one, two).then!({ joinFinished++; });
+
+    one.put();
+    assert(oneFinished == 1);
+    assert(joinFinished == 0);
+    two.put();
+    assert(twoFinished == 1);
+    assert(joinFinished == 1);
+
+}
+
+/// Listens to a number of publishers, and as soon as all of them emit a result at least once,
+/// emits an event.
+///
+/// Only emits events once; if a publisher emits multiple events, only the first one is used.
+/// Does not publish any values on finish.
+final class JoinPublisher : Publisher!() {
+    mixin implementSafe;
+
+    public {
+
+        /// Event emitted when each publisher on the list finishes.
+        Event!() onFinish;
+
+    }
+
+    private {
+
+        bool[] _done;
+        size_t _tasksLeft;
+
+    }
+
+    this(Publisher!()[] publishers...) {
+        this._done = new bool[publishers.length];
+        this._tasksLeft = publishers.length;
+
+        foreach (i, publisher; publishers) {
+            add(i, publisher);
+        }
+    }
+
+    override void subscribe(Subscriber!() subscriber) {
+        onFinish ~= subscriber;
+    }
+
+    /// Assign a publisher to listen to by index.
+    private void add(size_t i, Publisher!() publisher) {
+        publisher.subscribe({ emit(i); });
+    }
+
+    /// Mark a task as finished using its index.
+    ///
+    /// Does nothing if the task has already finished. Counts the number of tasks that remains to be completed,
+    /// and if all have, emits an event.
+    private void emit(size_t i) {
+        if (_done[i]) return;
+
+        _done[i] = true;
+        _tasksLeft--;
+
+        if (_tasksLeft == 0) {
+            onFinish();
+        }
+    }
+
+}
