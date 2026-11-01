@@ -45,16 +45,22 @@ struct Event(Ts...) {
     /// to the list, without removing the previous callbacks.
     ///
     /// Delegates will not be added to the list if they are identical to delegates already in the
-    /// set.
+    /// set, or if they are null.
     ///
     /// Params:
     ///     subscriber = Callback function to handle the event.
     /// Returns:
-    ///     True if the delegate has already been added to the set.
+    ///     True if the delegate has been added to the set.
+    ///     Returns false if the delegate is already in the set, or if it is null.
     /// See_Also:
     ///     [unsubscribe]
     bool subscribe(Subscriber!Ts subscriber) {
-        return subscribers.add(subscriber);
+        if (subscriber) {
+            return subscribers.add(subscriber);
+        }
+        else {
+            return false;
+        }
     }
 
     /// ditto
@@ -123,4 +129,15 @@ unittest {
     event.unsubscribe(dg2);
     event();
     assert(total == 5);
+}
+
+@("Event ignores null values when inserting")
+unittest {
+    Subscriber!() subscriber;
+    Event!() event;
+    event ~= null;
+    event.subscribe(null);
+    event ~= subscriber;
+    event.subscribe(subscriber);
+    assert(event.length == 0);
 }
