@@ -136,7 +136,7 @@ struct Set(T) {
     /// Returns:
     ///     True if the item exists in the set.
     bool opBinaryRight(string op : "in")(const T key) const {
-        return _data[].canFind!((T a, T b) => equals(a, b))(key);
+        return _data[].canFind!((const T a, const T b) => equals(a, b))(key);
     }
 
     /// Insert an item into the set.
@@ -179,4 +179,21 @@ unittest {
     assert(2  in numbers);
     assert(3  in numbers);
     assert(4 !in numbers);
+}
+
+@("Set works with indirections")
+unittest {
+    class Foo : Safe {
+        mixin implementSafe;
+    }
+    Set!Foo set;
+    auto a = new Foo;
+    auto b = new Foo;
+    auto c = new Foo;
+    set.add(a);
+    set.add(b);
+    set.remove(a);
+    assert(a !in set);
+    assert(b  in set);
+    assert(c !in set);
 }
